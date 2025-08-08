@@ -74,7 +74,7 @@ function displayImage(file) {
     const img = document.createElement('img');
     img.src = URL.createObjectURL(file);
     img.onload = () => URL.revokeObjectURL(img.src);
-    
+
     preview.innerHTML = '';
     preview.appendChild(img);
 }
@@ -83,30 +83,30 @@ async function predictImage(file) {
     // Show loading
     loading.style.display = 'block';
     result.style.display = 'none';
-    
+
     try {
         // Create FormData
         const formData = new FormData();
         formData.append('image', file);
-        
+
         // Send to backend
-        const response = await fetch('http://localhost:3000/predict', {
+        const response = await fetch('/predict', {
             method: 'POST',
             body: formData
         });
-        
+
         if (!response.ok) {
             throw new Error('Prediction failed');
         }
-        
+
         const data = await response.json();
-        
+
         // Display results
         predictedClass.textContent = data.class_name;
-        confidence.textContent = `${(data.confidence * 100).toFixed(1)}%`;
-        
+        confidence.textContent = `${data.confidence}%`;
+
         result.style.display = 'block';
-        
+
     } catch (error) {
         console.error('Error:', error);
         alert('Error making prediction. Please try again.');
