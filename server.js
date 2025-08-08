@@ -7,7 +7,7 @@ const fs = require('fs');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
-const PYTHON_COMMAND = process.env.PYTHON_COMMAND || 'python';
+const PYTHON_COMMAND = process.env.PYTHON_COMMAND || 'python3';
 
 // Enable CORS
 app.use(cors({ origin: '*' }));
@@ -39,9 +39,7 @@ app.post('/predict', upload.single('image'), async (req, res) => {
 
     try {
         const result = await runPythonPrediction(imagePath);
-        console.log(result)
         const parsed = parsePrediction(result);
-        console.log(parsed)
 
         // Clean up the uploaded image
         fs.unlink(imagePath, (err) => {
