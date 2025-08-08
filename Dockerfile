@@ -1,24 +1,27 @@
-# Use an official Python base image
-FROM python:3.10-slim
+# Base image with Node.js and Python
+FROM node:20-slim
 
-# Set the working directory
+# Install Python and pip
+RUN apt-get update && apt-get install -y python3 python3-pip && \
+    apt-get clean && rm -rf /var/lib/apt/lists/*
+
+# Set working directory
 WORKDIR /app
 
-# Copy Python dependencies
-COPY requirements.txt ./
-RUN pip install --no-cache-dir -r requirements.txt
+# Copy Node dependencies and install
+COPY package*.json ./
+RUN npm install
 
-# Copy all files (Python, JS, HTML, etc.)
+# Copy Python dependencies and install
+COPY requirements.txt ./
+RUN pip3 install --no-cache-dir --break-system-packages -r requirements.txt
+
+# Copy the rest of the app
 COPY . .
 
-# Install Node.js and npm
-RUN apt-get update && apt-get install -y curl gnupg && \
-    curl -fsSL https://deb.nodesource.com/setup_18.x | bash - && \
-    apt-get install -y nodejs && \
-    npm install
-
-# Expose port for the server (update if your server.js uses a different port)
+# Expose your Node.js port
 EXPOSE 3000
 
-# Command to run Node.js server
+# Start the Node.js server (which spawns Python as needed)
 CMD ["node", "server.js"]
+

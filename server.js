@@ -3,99 +3,110 @@ const multer = require('multer');
 const path = require('path');
 const { spawn } = require('child_process');
 const cors = require('cors');
+const fs = require('fs');
 
 const app = express();
-const PORT = 3000;
+const PORT = process.env.PORT || 3000;
+const PYTHON_COMMAND = process.env.PYTHON_COMMAND || 'python3';
 
-// Middleware
-app.use(cors());
-app.use(express.json());
+// Enable CORS
+app.use(cors({ origin: '*' }));
+
+// Serve frontend files (optional)
 app.use(express.static('.'));
 
-// Configure multer for file uploads
-const storage = multer.diskStorage({
-    destination: (req, file, cb) => {
-        cb(null, 'uploads/');
-    },
-    filename: (req, file, cb) => {
-        cb(null, Date.now() + '-' + file.originalname);
-    }
-});
-
-const upload = multer({ storage: storage });
-
 // Ensure uploads directory exists
-const fs = require('fs');
-const uploadsDir = './uploads';
-if (!fs.existsSync(uploadsDir)) {
-    fs.mkdirSync(uploadsDir);
-}
+const uploadsDir = path.join(__dirname, 'uploads');
+if (!fs.existsSync(uploadsDir)) fs.mkdirSync(uploadsDir);
 
-// Prediction endpoint
-app.post('/predict', upload.single('image'), (req, res) => {
+// Multer configuration
+const storage = multer.diskStorage({
+    destination: (req, file, cb) => cb(null, uploadsDir),
+    filename: (req, file, cb) => cb(null, `${Date.now()}-${file.originalname}`)
+});
+const upload = multer({ storage });
+
+// Health check route
+app.get('/health', (req, res) => res.json({ status: 'ok' }));
+
+// Prediction route
+app.post('/predict', upload.single('image'), async (req, res) => {
     if (!req.file) {
-        return res.status(400).json({ error: 'No image file provided' });
+        return res.status(400).json({ error: 'No image file uploaded' });
     }
 
     const imagePath = req.file.path;
-    
-    // Spawn Python process for prediction
-    const pythonProcess = spawn('python', ['predict.py', imagePath]);
-    
-    let output = '';
-    let error = '';
 
-    pythonProcess.stdout.on('data', (data) => {
-        output += data.toString();
-    });
+    try {
+        const result = await runPythonPrediction(imagePath);
+        const parsed = parsePrediction(result);
 
-    pythonProcess.stderr.on('data', (data) => {
-        error += data.toString();
-    });
-
-    pythonProcess.on('close', (code) => {
-        // Clean up uploaded file
+        // Clean up the uploaded image
         fs.unlink(imagePath, (err) => {
-            if (err) console.error('Error deleting file:', err);
+            if (err) console.warn('⚠️ Failed to delete uploaded image:', err);
         });
 
-        if (code !== 0) {
-            console.error('Python error:', error);
-            return res.status(500).json({ error: 'Prediction failed', details: error });
+        if (!parsed) {
+            return res.status(500).json({ error: 'Failed to parse prediction output' });
         }
 
-        try {
-            // Parse the output from predict.py
-            const lines = output.trim().split('\n');
-            const lastLine = lines[lines.length - 1];
-            
-            // Extract class name from output like "Predicted Class: coral (Class 0)"
-            const match = lastLine.match(/Predicted Class: (.+?) \(Class (\d+)\)/);
-            if (match) {
-                const className = match[1];
-                const classIndex = parseInt(match[2]);
-                
-                res.json({
-                    class_name: className,
-                    class_index: classIndex,
-                    confidence: 0.95 // Mock confidence since predict.py doesn't output it
-                });
-            } else {
-                res.status(500).json({ error: 'Could not parse prediction result' });
-            }
-        } catch (parseError) {
-            res.status(500).json({ error: 'Error parsing prediction result', details: parseError.message });
-        }
-    });
-});
+        return res.json({
+            class_name: parsed.className,
+            class_index: parsed.classIndex,
+            confidence: parsed.confidence
+        });
 
-// Health check endpoint
-app.get('/health', (req, res) => {
-    res.json({ status: 'ok', message: 'Seabed classification API is running' });
+    } catch (err) {
+        fs.unlink(imagePath, () => { }); // Attempt delete even on error
+        console.error('❌ Prediction error:', err.message);
+        return res.status(500).json({ error: 'Prediction failed', details: err.message });
+    }
 });
 
 // Start server
 app.listen(PORT, () => {
-    console.log(`Server running at http://localhost:${PORT}`);
-    console.log('Upload images to http://localhost:3000 for classification');
+    console.log(`[${new Date().toISOString()}] 🚀 Server is running at http://localhost:${PORT}`);
 });
+
+// Run Python script and return output
+function runPythonPrediction(imagePath) {
+    return new Promise((resolve, reject) => {
+        const process = spawn(PYTHON_COMMAND, ['predict.py', imagePath]);
+
+        let output = '';
+        let error = '';
+
+        process.stdout.on('data', (data) => {
+            output += data.toString();
+        });
+
+        process.stderr.on('data', (data) => {
+            error += data.toString();
+        });
+
+        process.on('close', (code) => {
+            if (code !== 0) {
+                return reject(new Error(error || 'Unknown error from Python script'));
+            }
+            resolve(output.trim());
+        });
+    });
+}
+
+// Parse output from Python
+function parsePrediction(output) {
+    const classMatch = output.match(/Predicted Class:\s*(.+?)\s*\(Class\s*(\d+)\)/);
+    const confidenceMatch = output.match(/Confidence:\s*([\d.]+)%?/);
+
+    if (!classMatch || !confidenceMatch) {
+        console.error('❌ Could not extract prediction:', output);
+        return null;
+    }
+
+    return {
+        className: classMatch[1].trim(),
+        classIndex: parseInt(classMatch[2], 10),
+        confidence: parseFloat(confidenceMatch[1]).toFixed(2)
+    };
+}
+
