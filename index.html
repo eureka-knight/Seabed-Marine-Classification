@@ -1,0 +1,40 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Seabed Classification</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div class="container">
+        <h1>Seabed Marine classify into their respective Kingdom/Class</h1>
+        <p>Upload an underwater image to classify marine life</p>
+        
+        <div class="upload-section">
+            <input type="file" id="imageInput" accept="image/*" hidden>
+            <button class="upload-btn" onclick="document.getElementById('imageInput').click()">
+                📁 Choose Image
+            </button>
+            <div id="preview" class="image-preview">
+                <p><b>Drop image here or click to upload</b></p>
+            </div>
+        </div>
+
+        <div id="result" class="result-section" style="display: none;">
+            <h2>Prediction Result</h2>
+            <div class="prediction-box">
+                <p><strong>Class:</strong> <span id="predictedClass">-</span></p>
+                <p><strong>Confidence:</strong> <span id="confidence">-</span></p>
+            </div>
+        </div>
+
+        <div id="loading" class="loading" style="display: none;">
+            <div class="spinner"></div>
+            <p>Analyzing image...</p>
+        </div>
+    </div>
+
+    <script src="script.js"></script>
+</body>
+</html>
